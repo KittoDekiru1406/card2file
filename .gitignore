@@ -1,0 +1,6 @@
+*.pyc
+*.swp
+*.pkl
+*.pth
+__pycache__/
+weights/
