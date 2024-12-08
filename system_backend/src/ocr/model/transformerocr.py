@@ -1,7 +1,7 @@
-from backbone.cnn import CNN 
-from seqmodel.transformer import LanguageTransformer
-from seqmodel.seq2seq import Seq2Seq
-from seqmodel.convseq2seq import ConvSeq2Seq
+from ocr.model.backbone.cnn import CNN 
+from ocr.model.seqmodel.transformer import LanguageTransformer
+from ocr.model.seqmodel.seq2seq import Seq2Seq
+from ocr.model.seqmodel.convseq2seq import ConvSeq2Seq
 from torch import nn
 
 
