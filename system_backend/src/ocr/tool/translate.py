@@ -24,6 +24,7 @@ def build_model(config):
 
     return model, vocab
 
+
 def translate(img, model, max_seq_length=128, sos_token=1, eos_token=2):
     "data: BxCXHxW"
     model.eval()
@@ -71,3 +72,33 @@ def translate(img, model, max_seq_length=128, sos_token=1, eos_token=2):
         char_probs = np.sum(char_probs, axis=-1) / (char_probs > 0).sum(-1)
 
     return translated_sentence, char_probs
+
+
+def process_input(image, image_height, image_min_width, image_max_width):
+    img = process_image(image, image_height, image_min_width, image_max_width)
+    img = img[np.newaxis, ...]
+    img = torch.FloatTensor(img)
+    return img
+
+
+def process_image(image, image_height, image_min_width, image_max_width):
+    img = image.convert("RGB")
+
+    w, h = img.size
+    new_w, image_height = resize(w, h, image_height, image_min_width, image_max_width)
+
+    img = img.resize((new_w, image_height), Image.LANCZOS)
+
+    img = np.asarray(img).transpose(2, 0, 1)
+    img = img / 255
+    return img
+
+
+def resize(w, h, expected_height, image_min_width, image_max_width):
+    new_w = int(expected_height * float(w) / float(h))
+    round_to = 10
+    new_w = math.ceil(new_w / round_to) * round_to
+    new_w = max(new_w, image_min_width)
+    new_w = min(new_w, image_max_width)
+
+    return new_w, expected_height
