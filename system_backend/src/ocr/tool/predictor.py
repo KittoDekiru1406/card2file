@@ -2,7 +2,6 @@ from ocr.tool.translate import (
     build_model,
     translate,
     process_input,
-    predict,
 )
 from ocr.tool.utils import download_weights
 from ocr.tool.config import Cfg
