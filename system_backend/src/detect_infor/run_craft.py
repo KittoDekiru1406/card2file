@@ -5,8 +5,8 @@ from dotenv import load_dotenv
 import numpy as np
 import argparse
 import torch
-import gdown
 from torch.autograd import Variable
+import subprocess
 
 from src.utils import craft_utils
 from src.utils import image_utils
@@ -17,11 +17,18 @@ from src.craft_model.craft import CRAFT
 load_dotenv()
 
 # Download craft_weight
-# url_weights_craft_25k = os.getenv('URL_WEIGHTS_CRAFT_25K')
-# weights_folder = os.getenv('WEIGHTS_FOLDER')
-# if not os.path.isdir(weights_folder):
-#     os.mkdir(weights_folder)
-# gdown.download(url_weights_craft_25k, weights_folder, fuzzy=True, quiet=False)
+url_weights_craft_25k = os.getenv('URL_WEIGHTS_CRAFT_25K')
+weights_folder = os.getenv('WEIGHTS_FOLDER')
+if not os.path.isdir(weights_folder):
+    os.mkdir(weights_folder)
+output_path = os.getenv('TRAINED_MODEL')
+
+if not os.path.isfile(output_path):
+    print("File chưa tồn tại, tiến hành tải về...")
+    subprocess.run(["wget", "--no-check-certificate", url_weights_craft_25k, "-O", output_path])
+    print(f"File đã được tải về: {output_path}")
+else:
+    print(f"File đã tồn tại tại: {output_path}, bỏ qua quá trình tải.")
 
 
 parser = argparse.ArgumentParser(description='CRAFT Text Detection')
@@ -33,11 +40,11 @@ parser.add_argument('--canvas_size', default=int(os.getenv('CANVAS_SIZE')), type
 parser.add_argument('--mag_ratio', default=float(os.getenv('MAG_RATIO')), type=float, help='image magnification ratio')
 parser.add_argument('--poly', default=os.getenv('POLY').lower() == 'true', action='store_true', help='enable polygon type')
 parser.add_argument('--show_time', default=os.getenv('SHOW_TIME').lower() == 'true', action='store_true', help='show processing time')
-parser.add_argument('--input_root_folder', default=os.getenv('INPUT_ROOT_FOLDER'), type=str, help='folder path to input images')
+parser.add_argument('--output_after_preprocessing_folder', default=os.getenv('OUTPUT_AFTER_PREPROCESSING_FOLDER'), type=str, help='folder path to input images')
 
 args = parser.parse_args()
 
-image_list, _, _ = file_utils.get_files(args.input_root_folder)
+image_list, _, _ = file_utils.get_files(args.output_after_preprocessing_folder)
 
 # Create output folder
 output_craft_detect_folder = os.getenv('OUTPUT_CRAFT_DETECT_FOLDER')
@@ -94,6 +101,45 @@ def run_net(net, image, text_threshold, link_threshold, low_text, poly):
 
     return boxes, polys, ret_score_text
 
+def are_in_same_line(box1, box2, vertical_threshold):
+    y1_top = min(box1[1], box1[3])
+    y2_top = min(box2[1], box2[3])
+    y1_bottom = max(box1[5], box1[7])
+    y2_bottom = max(box2[5], box2[7])
+    return abs(y1_top - y2_top) <= vertical_threshold or abs(y1_bottom - y2_bottom) <= vertical_threshold
+
+
+def group_bounding_boxes(bounding_boxes, horizontal_threshold, vertical_threshold):
+    grouped_boxes = []
+    visited = set()
+
+    for i, box1 in enumerate(bounding_boxes):
+        if i in visited:
+            continue
+        group = [box1]
+        visited.add(i)
+
+        for j, box2 in enumerate(bounding_boxes):
+            if j in visited:
+                continue
+            if are_in_same_line(box1, box2, vertical_threshold) and \
+               abs(box1[2] - box2[0]) <= horizontal_threshold:
+                group.append(box2)
+                visited.add(j)
+
+        # Cập nhật tọa độ box sau khi gộp
+        x_coords = [coord for box in group for coord in box[::2]]
+        y_coords = [coord for box in group for coord in box[1::2]]
+        grouped_boxes.append([
+            min(x_coords), min(y_coords),
+            max(x_coords), min(y_coords),
+            max(x_coords), max(y_coords),
+            min(x_coords), max(y_coords)
+        ])
+
+    return np.array(grouped_boxes)
+
+
 
 def extract_text_regions(image_path: str, bounding_boxes, output_folder="output"):
     """
@@ -129,8 +175,12 @@ def extract_text_regions(image_path: str, bounding_boxes, output_folder="output"
         x, y, w, h = rect
 
         cropped_image = image[y:y+h, x:x+w]
-
-        output_path = f"{output_folder}/cropped_{idx}.png"
+        
+        if idx < 10:
+            output_path = f"{output_folder}/0{idx}.png"
+        else:
+            output_path = f"{output_folder}/{idx}.png"
+    
         cv2.imwrite(output_path, cropped_image)
         print(f"Save image: {output_path}")
 
@@ -158,7 +208,9 @@ if __name__ == '__main__':
         bounding_boxes = np.array(polys)
         bounding_boxes = np.squeeze(bounding_boxes)
         bounding_boxes = np.array([box.flatten() for box in bounding_boxes])
-        
+         
+        # Group near bounding boxes
+        bounding_boxes = group_bounding_boxes(bounding_boxes, horizontal_threshold=2000, vertical_threshold=15)
 
         # save score text
         filename, file_ext = os.path.splitext(os.path.basename(image_path))
