@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from ocr.tool.predictor import Predictor
 from ocr.tool.config import Cfg
 from PIL import Image, UnidentifiedImageError
+import data_processing
 import io
 import os
 
@@ -36,20 +37,9 @@ def ocr_predict(image: Image) -> str:
     text = detector.predict(image)
     return text 
 
-
-def ocr_batch(folder: str) -> dict:
-    results = {}
-    detector = get_detector()
-    for file_path in get_file_paths_from_folder(folder):
-        try:
-            with open(file_path, "rb") as f:
-                image = Image.open(f)
-                text = detector.predict(image)
-                results[file_path] = text
-        except Exception as e:
-            results[file_path] = f"Error: {str(e)}"
+def ocr_batch():
+    results = data_processing.main()
     return results
-
 
 def ocr_extract(folder: str) -> dict:
     pass
@@ -95,24 +85,10 @@ async def api_ocr_predict(file: UploadFile = File(...)):
         
 
 @app.post("/api/ocr/batch")
-async def api_ocr_batch(folder: str):
-    try:
-        if not os.path.isdir(folder):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail="Invalid folder path. Please provide a valid directory.")
-
-        results = ocr_batch(folder)
-
-        return OCRBatchResponse(results=results)
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        # Log the internal error
-        print(f"Internal error: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail="An error occurred while processing the folder.")
-
+async def api_ocr_batch():
+    
+    results = ocr_batch()
+    return results
 
 @app.post("/api/ocr/extract")
 async def api_ocr_extract(folder: str):
