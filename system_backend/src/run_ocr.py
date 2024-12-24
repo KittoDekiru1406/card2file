@@ -50,6 +50,11 @@ def ocr_folder_to_csv(folder_path: str, output_csv: str):
 
 def mainn():
     folder_path = os.getenv('OUTPUT_CUTTING_DETECT_FOLDER')
+
+    output_folder = './database/data_output'
+    output_csv = os.path.join(output_folder, 'ocr_output.csv')
+    os.makedirs(output_folder, exist_ok=True)
+    
     output_csv = './database/data_output/ocr_output.csv'
 
 
