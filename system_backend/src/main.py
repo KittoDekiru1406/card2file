@@ -38,7 +38,8 @@ def ocr_predict(image: Image) -> str:
     return text 
 
 def ocr_batch():
-    results = data_processing.main()
+    for _ in range(3):
+        results = data_processing.main()
     return results
 
 def ocr_extract(folder: str) -> dict:

@@ -5,17 +5,20 @@ import os
 import shutil
 import difflib
 from dotenv import load_dotenv
+from run_ocr import mainn
 
+mainn()
 load_dotenv()
 
                         #===================sắp xếp theo file ảnh ==============
-def load_and_sort_csv(path):
-    df = pd.read_csv(path)
+def load_and_sort_csv(path_file_csv):
+    df = pd.read_csv(path_file_csv)
     def extract_number(filename):
         match = re.search(r'cropped_(\d+)', filename)
         return int(match.group(1)) if match else -1
     df['file_number'] = df['File Path'].apply(lambda x: extract_number(x))
     df = df.sort_values(by='file_number').drop(columns='file_number')
+    df.to_csv(path_file_csv, index=False)
     return df
 
                         #====================gom tọa độ=================================
@@ -303,8 +306,10 @@ def clear_folder(folder_path):
             file_path = os.path.join(folder_path, filename)
             os.unlink(file_path)
 
+
 def main():
     path_file_csv = 'C:/Users/dovan/Project/DL/card2file/database/data_output/ocr_output.csv'
+    # path_file_csv = './database/data_output/ocr_output.csv'
     path_img_detect = os.getenv('OUTPUT_CRAFT_DETECT_FOLDER')
     df = load_and_sort_csv(path_file_csv)
     df_coordinates = coordinates(path_img_detect)
@@ -312,30 +317,17 @@ def main():
     result_1, result_2 = gom(result)
     TT = {}
     Add_dict(TT, result_1, result_2)
-    # for key, value in TT.items():
-    #     print(f"{key}: {value}")
+
     return TT
+
+# if __name__ == '__main__':
+#     TT = main()
+
+#     for key, value in TT.items():
+#         print(f"{key}: {value}")
     
-    # clear_folder('./database/after_preprocessing')
-    # clear_folder('./database/craft_image/img_detect')
-    # clear_folder('./database/craft_image/cutting_image')
+#     clear_folder('./database/after_preprocessing')
+#     clear_folder('./database/craft_image/img_detect')
+#     clear_folder('./database/craft_image/cutting_image')
 
 
-if __name__ == '__main__':
-    TT = main()
-
-    
-#     path_file_csv = './database/data_output/ocr_output.csv'
-#     path_img_detect = os.getenv('OUTPUT_CRAFT_DETECT_FOLDER')
-#     df = load_and_sort_csv(path_file_csv)
-#     df_coordinates = coordinates(path_img_detect)
-#     result = merged(df, df_coordinates)
-#     result_1, result_2 = gom(result)
-#     TT = {}
-#     Add_dict(TT, result_1, result_2)
-    for key, value in TT.items():
-        print(f"{key}: {value}")
-    
-#     # clear_folder('./database/after_preprocessing')
-#     # clear_folder('./database/craft_image/img_detect')
-#     # clear_folder('./database/craft_image/cutting_image')
