@@ -184,6 +184,46 @@ def extract_text_regions(image_path: str, bounding_boxes, output_folder="output"
         cv2.imwrite(output_path, cropped_image)
         print(f"Save image: {output_path}")
 
+
+def predict(image: np.ndarray) -> None:
+    '''
+        This function is to predict a image
+
+        Args:
+            image: a numpy array
+
+        Returns:
+            None
+    '''
+    net = CRAFT()
+    print('Loading weights from checkpoint (' + args.trained_model + ')')
+
+    net.load_state_dict(file_utils.copyStateDict(torch.load(args.trained_model, map_location=torch.device('cpu'))))
+
+    net.eval()
+    
+    bboxes, polys, score_text = run_net(net, image, args.text_threshold, args.link_threshold, args.low_text, args.poly)
+
+    # position of bouding boxes
+    bounding_boxes = np.array(polys)
+    bounding_boxes = np.squeeze(bounding_boxes)
+    bounding_boxes = np.array([box.flatten() for box in bounding_boxes])
+        
+    # Group near bounding boxes
+    bounding_boxes = group_bounding_boxes(bounding_boxes, horizontal_threshold=2000, vertical_threshold=15)
+
+    # save score text
+    filename, file_ext = os.path.splitext(os.path.basename(image_path))
+    mask_file = output_craft_detect_folder + "/res_" + filename + '_mask.jpg'
+    cv2.imwrite(mask_file, score_text)
+
+    file_utils.saveResult(image_path, image[:, :, ::-1], polys, dirname=output_craft_detect_folder)
+
+    # save region images
+    extract_text_regions(image_path, bounding_boxes, output_cutting_detect_folder)
+
+
+
 if __name__ == '__main__':
     # load net
     net = CRAFT()
