@@ -8,11 +8,11 @@ import torch
 from torch.autograd import Variable
 import subprocess
 
-from src.utils import craft_utils
-from src.utils import image_utils
-from src.utils import file_utils
+from .src.utils import craft_utils
+from .src.utils import image_utils
+from .src.utils import file_utils
 
-from src.craft_model.craft import CRAFT
+from .src.craft_model.craft import CRAFT
 
 load_dotenv()
 
@@ -30,21 +30,18 @@ if not os.path.isfile(output_path):
 else:
     print(f"File đã tồn tại tại: {output_path}, bỏ qua quá trình tải.")
 
+trained_model = os.getenv('TRAINED_MODEL')
+text_threshold = float(os.getenv('TEXT_THRESHOLD'))
+low_text = float(os.getenv('LOW_TEXT'))
+link_threshold = float(os.getenv('LINK_THRESHOLD'))
+canvas_size = int(os.getenv('CANVAS_SIZE'))
+mag_ratio = float(os.getenv('MAG_RATIO'))
+poly = os.getenv('POLY').lower() == 'true'
+show_time = os.getenv('SHOW_TIME').lower() == 'true'
+input_root_folder = os.getenv('INPUT_ROOT_FOLDER')
 
-parser = argparse.ArgumentParser(description='CRAFT Text Detection')
-parser.add_argument('--trained_model', default=os.getenv('TRAINED_MODEL'), type=str, help='pretrained model')
-parser.add_argument('--text_threshold', default=float(os.getenv('TEXT_THRESHOLD')), type=float, help='text confidence threshold')
-parser.add_argument('--low_text', default=float(os.getenv('LOW_TEXT')), type=float, help='text low-bound score')
-parser.add_argument('--link_threshold', default=float(os.getenv('LINK_THRESHOLD')), type=float, help='link confidence threshold')
-parser.add_argument('--canvas_size', default=int(os.getenv('CANVAS_SIZE')), type=int, help='image size for inference')
-parser.add_argument('--mag_ratio', default=float(os.getenv('MAG_RATIO')), type=float, help='image magnification ratio')
-parser.add_argument('--poly', default=os.getenv('POLY').lower() == 'true', action='store_true', help='enable polygon type')
-parser.add_argument('--show_time', default=os.getenv('SHOW_TIME').lower() == 'true', action='store_true', help='show processing time')
-parser.add_argument('--output_after_preprocessing_folder', default=os.getenv('OUTPUT_AFTER_PREPROCESSING_FOLDER'), type=str, help='folder path to input images')
 
-args = parser.parse_args()
-
-image_list, _, _ = file_utils.get_files(args.output_after_preprocessing_folder)
+image_list, _, _ = file_utils.get_files(input_root_folder)
 
 # Create output folder
 output_craft_detect_folder = os.getenv('OUTPUT_CRAFT_DETECT_FOLDER')
@@ -59,7 +56,7 @@ def run_net(net, image, text_threshold, link_threshold, low_text, poly):
     start_time = time.time()
 
     #resize image
-    img_resized, target_ratio, size_heatmap = image_utils.resize_aspect_ratio(image, args.canvas_size, interpolation=cv2.INTER_LINEAR, mag_ratio=args.mag_ratio)
+    img_resized, target_ratio, size_heatmap = image_utils.resize_aspect_ratio(image, canvas_size, interpolation=cv2.INTER_LINEAR, mag_ratio=mag_ratio)
     
     ratio_h = ratio_w = 1 / target_ratio
 
@@ -96,7 +93,7 @@ def run_net(net, image, text_threshold, link_threshold, low_text, poly):
     render_img = np.hstack((render_img, score_link))
     ret_score_text = image_utils.cvt2HeatmapImg(render_img)
 
-    if args.show_time:
+    if show_time:
         print("\ninfer/postproc time : {:.3f}/{:.3f}".format(end_time_1, end_time_2))
 
     return boxes, polys, ret_score_text
@@ -185,24 +182,25 @@ def extract_text_regions(image_path: str, bounding_boxes, output_folder="output"
         print(f"Save image: {output_path}")
 
 
-def predict(image: np.ndarray) -> None:
+def predict(image: np.ndarray, image_path: str) -> None:
     '''
         This function is to predict a image
 
         Args:
             image: a numpy array
+            image_path: path of image
 
         Returns:
             None
     '''
     net = CRAFT()
-    print('Loading weights from checkpoint (' + args.trained_model + ')')
+    print('Loading weights from checkpoint (' + trained_model + ')')
 
-    net.load_state_dict(file_utils.copyStateDict(torch.load(args.trained_model, map_location=torch.device('cpu'))))
+    net.load_state_dict(file_utils.copyStateDict(torch.load(trained_model, map_location=torch.device('cpu'))))
 
     net.eval()
     
-    bboxes, polys, score_text = run_net(net, image, args.text_threshold, args.link_threshold, args.low_text, args.poly)
+    bboxes, polys, score_text = run_net(net, image, text_threshold, link_threshold, low_text, poly)
 
     # position of bouding boxes
     bounding_boxes = np.array(polys)
@@ -210,7 +208,7 @@ def predict(image: np.ndarray) -> None:
     bounding_boxes = np.array([box.flatten() for box in bounding_boxes])
         
     # Group near bounding boxes
-    bounding_boxes = group_bounding_boxes(bounding_boxes, horizontal_threshold=2000, vertical_threshold=15)
+    # bounding_boxes = group_bounding_boxes(bounding_boxes, horizontal_threshold=2000, vertical_threshold=15)
 
     # save score text
     filename, file_ext = os.path.splitext(os.path.basename(image_path))
@@ -221,45 +219,3 @@ def predict(image: np.ndarray) -> None:
 
     # save region images
     extract_text_regions(image_path, bounding_boxes, output_cutting_detect_folder)
-
-
-
-if __name__ == '__main__':
-    # load net
-    net = CRAFT()
-
-    print('Loading weights from checkpoint (' + args.trained_model + ')')
-
-    net.load_state_dict(file_utils.copyStateDict(torch.load(args.trained_model, map_location=torch.device('cpu'))))
-
-    net.eval()
-
-    start_time = time.time()
-
-    bounding_boxes = None
-
-    for k, image_path in enumerate(image_list):
-        print("Test image {:d}/{:d}: {:s}".format(k + 1, len(image_list), image_path), end='\r')
-        image = image_utils.loadImage(image_path)
-
-        bboxes, polys, score_text = run_net(net, image, args.text_threshold, args.link_threshold, args.low_text, args.poly)
-
-        # position of bouding boxes
-        bounding_boxes = np.array(polys)
-        bounding_boxes = np.squeeze(bounding_boxes)
-        bounding_boxes = np.array([box.flatten() for box in bounding_boxes])
-         
-        # Group near bounding boxes
-        bounding_boxes = group_bounding_boxes(bounding_boxes, horizontal_threshold=2000, vertical_threshold=15)
-
-        # save score text
-        filename, file_ext = os.path.splitext(os.path.basename(image_path))
-        mask_file = output_craft_detect_folder + "/res_" + filename + '_mask.jpg'
-        cv2.imwrite(mask_file, score_text)
-
-        file_utils.saveResult(image_path, image[:, :, ::-1], polys, dirname=output_craft_detect_folder)
-
-        # save region images
-        extract_text_regions(image_path, bounding_boxes, output_cutting_detect_folder)
-
-    print("elapsed time : {}s".format(time.time() - start_time))
