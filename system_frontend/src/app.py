@@ -3,11 +3,9 @@ import requests
 from PIL import Image
 import io
 import os
-import json
+from reportlab.pdfgen import canvas
 from streamlit_webrtc import webrtc_streamer
 import cv2
-import numpy as np
-from fpdf import FPDF
 
 CARD2FILE_URL = os.getenv("CARD2FILE_URL", "http://localhost:8000/api/ocr")
 
@@ -105,33 +103,25 @@ def display_results(data, col):
         for key, value in data.items():
             st.markdown(f"**{key}:** {value}")
         
-        # Thêm nút xuất kết quả ra PDF
-        if st.button("📥 Lưu kết quả dưới dạng PDF"):
-            try:
-                # Tạo PDF
-                pdf = FPDF()
-                pdf.add_page()
-                pdf.set_font("Arial", size=12)
-                pdf.cell(200, 10, txt="Kết quả trích xuất căn cước công dân", ln=True, align='C')
+        pdf_output = io.BytesIO()
+        c = canvas.Canvas(pdf_output)
+        c.setFont("Helvetica", 12)
 
-                for key, value in data.items():
-                    pdf.cell(0, 10, txt=f"{key}: {value}", ln=True)
+        c.drawString(100, 800, "Kết quả trích xuất căn cước công dân")
+        y = 780
+        for key, value in data.items():
+            c.drawString(100, y, f"{key}: {value}")
+            y -= 20
 
-                # Lưu PDF vào BytesIO
-                pdf_output = io.BytesIO()
-                pdf.output(pdf_output)
-                pdf_output.seek(0)  # Đảm bảo con trỏ ở đầu stream
-
-                # Tạo nút tải xuống PDF
-                st.download_button(
-                    label="📥 Tải xuống PDF",
-                    data=pdf_output,
-                    file_name="cccd_data.pdf",
-                    mime="application/pdf"
-                )
-
-            except Exception as e:
-                st.error(f"Lỗi khi tạo PDF: {str(e)}")
+        c.save()
+        pdf_output.seek(0)
+        
+        st.download_button(
+            label="📥 Tải xuống PDF",
+            data=pdf_output,
+            file_name="cccd_data.pdf",
+            mime="application/pdf"
+        )
 
 
 if __name__ == "__main__":

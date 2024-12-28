@@ -1,1 +1,4 @@
 weights/
+.git
+node_modules
+*.log
