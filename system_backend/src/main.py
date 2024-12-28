@@ -1,70 +1,32 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, status
+from fastapi import FastAPI, File, UploadFile, HTTPException, status, Form
 from pydantic import BaseModel
-from ocr.tool.predictor import Predictor
-from ocr.tool.config import Cfg
+from detect_infor.run_craft import predict
+from data_processing import post_processing
+from ocr.run_ocr import ocr_folder_to_csv
 from PIL import Image, UnidentifiedImageError
+import numpy as np
 import io
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
+
+root_image_dir = os.getenv('INPUT_ROOT_FOLDER')
+cutting_image_folder_path = os.getenv('OUTPUT_CUTTING_DETECT_FOLDER')
+craft_detect_folder = os.getenv('OUTPUT_CRAFT_DETECT_FOLDER')
 
 # Initialize FastAPI app
-app = FastAPI()
+app = FastAPI(title="OCR APP")
 
-
-# Lazy load the model using a singleton pattern
-
-def get_detector() -> Predictor:
-    if not hasattr(app.state, "detector"):
-        config = Cfg.load_config_from_name('vgg_transformer')
-        config['cnn']['pretrained'] = False
-        config['device'] = 'cpu'
-        app.state.detector = Predictor(config)
-    return app.state.detector
-
-def get_file_paths_from_folder(folder: str) -> list:
-    file_paths = []
-    for file_name in os.listdir(folder):
-        file_path = os.path.join(folder, file_name)
-        if os.path.isfile(file_path):
-            file_paths.append(file_path)
-    file_paths = sorted(file_paths)
-    return file_paths
-
-# ======================== OCR Functions ========================
-def ocr_predict(image: Image) -> str:
-    detector = get_detector()
-    text = detector.predict(image)
-    return text 
-
-
-def ocr_batch(folder: str) -> dict:
-    results = {}
-    detector = get_detector()
-    for file_path in get_file_paths_from_folder(folder):
-        try:
-            with open(file_path, "rb") as f:
-                image = Image.open(f)
-                text = detector.predict(image)
-                results[file_path] = text
-        except Exception as e:
-            results[file_path] = f"Error: {str(e)}"
-    return results
-
-
-def ocr_extract(folder: str) -> dict:
-    pass
 
 # ======================== API Endpoints ========================   
-class OCRPredictResponse(BaseModel):
-    text: str
-
-class OCRBatchResponse(BaseModel):
+class OCRResponse(BaseModel):
     results: dict
 
 # ======================== API Endpoints ========================
 
-@app.post("/api/ocr/predict", response_model=OCRPredictResponse)
-async def api_ocr_predict(file: UploadFile = File(...)):
+@app.post("/api/ocr", response_model=OCRResponse)
+async def predictocr(file: UploadFile = File(...), filename: str = Form(...)):
     try:
         # Validate file type
         if not file.content_type.startswith("image"):
@@ -75,15 +37,27 @@ async def api_ocr_predict(file: UploadFile = File(...)):
         image_data = await file.read()
         try:
             image = Image.open(io.BytesIO(image_data))
+
+            save_path = os.path.join(root_image_dir, filename)
+            image.save(save_path)
+
         except UnidentifiedImageError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                                 detail="Uploaded file is not a valid image.")
+        image = np.array(image)
+        predict(image, save_path)
 
-        # Predict text
-        text = ocr_predict(image)
+        output_folder = './database/data_output'
+        output_csv = os.path.join(output_folder, 'ocr_output.csv')
+        os.makedirs(output_folder, exist_ok=True)
 
-        # Return response
-        return OCRPredictResponse(text=text)
+        output_csv = './database/data_output/ocr_output.csv'
+        ocr_folder_to_csv(cutting_image_folder_path, output_csv)
+        for _ in range(3):
+            results = post_processing(output_csv, craft_detect_folder)
+        
+        return OCRResponse(results=results)
+
 
     except HTTPException as e:
         raise e
@@ -92,28 +66,4 @@ async def api_ocr_predict(file: UploadFile = File(...)):
         print(f"Internal error: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail="An error occurred while processing the image.")
-        
-
-@app.post("/api/ocr/batch")
-async def api_ocr_batch(folder: str):
-    try:
-        if not os.path.isdir(folder):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail="Invalid folder path. Please provide a valid directory.")
-
-        results = ocr_batch(folder)
-
-        return OCRBatchResponse(results=results)
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        # Log the internal error
-        print(f"Internal error: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail="An error occurred while processing the folder.")
-
-
-@app.post("/api/ocr/extract")
-async def api_ocr_extract(folder: str):
-    pass
+    
