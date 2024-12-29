@@ -1,0 +1,17 @@
+[project]
+name = "system-backend"
+version = "0.1"
+dependencies = [
+    "torch==2.5.1",
+    "torchaudio==2.5.1",
+    "torchvision==0.20.1",
+    "numpy==1.26.4",
+    "opencv-python==4.10.0.84",
+    "gdown==5.2.0",
+    "scikit-image==0.24.0",
+    "fastapi==0.115.6",
+    "uvicorn==0.32.1",
+]
+
+[project.optional-dependencies]
+dev = ["black", "flake8"]

@@ -1,0 +1,14 @@
+[project]
+name = "system-backend"
+version = "0.1"
+dependencies = [
+    "numpy==1.26.4",
+    "streamlit==1.40.1",
+    "streamlit-webrtc==0.47.9",
+    "opencv-python==4.10.0.84",
+    "reportlab==4.2.5",
+    "opencv-python-headless==4.10.0.84",
+]
+
+[project.optional-dependencies]
+dev = ["black", "flake8"]

@@ -1,0 +1,23 @@
+version: '3'
+
+services:
+  system_api:
+    build: 
+      context: ./system_backend
+    env_file:
+      - .env
+    ports: 
+      - "8000:8000"
+
+  system_frontend:
+    build:
+      context: ./system_frontend
+    env_file:
+      - .env
+    depends_on:
+      - system_api
+    ports:
+      - "8501:8501"
+
+  
+    
